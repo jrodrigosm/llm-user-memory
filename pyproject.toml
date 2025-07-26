@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-memory"
+version = "0.1.0"
+description = "Transparent memory system for LLM"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = ["llm>=0.13"]
+
+[project.entry-points.llm]
+llm-memory = "llm_memory"
