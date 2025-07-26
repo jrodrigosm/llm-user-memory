@@ -8,11 +8,49 @@ import time
 import os
 import atexit
 import shutil
+import fcntl
+import contextlib
+import logging
 
 
 @llm.hookimpl
 def register_fragment_loaders(register):
     register("memory", memory_fragment_loader)
+
+
+def get_logger():
+    """Get logger instance for debugging (optional, off by default)."""
+    logger = logging.getLogger("llm-memory")
+    
+    # Only configure if not already configured
+    if not logger.handlers:
+        # Check if debug logging is enabled
+        debug_enabled = os.environ.get('LLM_MEMORY_DEBUG', '').lower() in ('1', 'true', 'yes')
+        
+        if debug_enabled:
+            logger.setLevel(logging.DEBUG)
+            # Create debug log file in memory directory
+            try:
+                memory_dir = llm.user_dir() / "memory"
+                memory_dir.mkdir(exist_ok=True)
+                log_file = memory_dir / "debug.log"
+                handler = logging.FileHandler(log_file)
+                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                handler.setFormatter(formatter)
+                logger.addHandler(handler)
+            except Exception:
+                # If logging setup fails, continue without logging
+                pass
+        else:
+            # Disable logging by default
+            logger.setLevel(logging.CRITICAL)
+    
+    return logger
+
+
+def is_memory_disabled():
+    """Check if memory system is disabled via environment variable."""
+    return os.environ.get('LLM_MEMORY_DISABLED', '').lower() in ('1', 'true', 'yes')
 
 
 def memory_fragment_loader(argument):
@@ -22,6 +60,10 @@ def memory_fragment_loader(argument):
     Returns text content to inject into prompt.
     """
     try:
+        # Check if memory system is disabled
+        if is_memory_disabled():
+            return ""
+            
         if argument == "auto":
             # Start background monitoring when memory is first used
             ensure_monitoring_started()
@@ -34,23 +76,28 @@ def memory_fragment_loader(argument):
         elif argument == "test":
             return llm.Fragment("TEST FRAGMENT: This memory fragment system is working correctly!", source="memory:test")
         return ""
-    except Exception:
-        # Silent failure - never break user's main command
+    except Exception as e:
+        # Log error for debugging but never break user's main command
+        logger = get_logger()
+        logger.debug(f"Fragment loader error: {e}")
         return ""
 
 
 def load_user_profile():
     """
-    Load user profile from ~/.config/llm/memory/profile.md
+    Load user profile from ~/.config/llm/memory/profile.md with file locking.
     Returns profile content or empty string if no profile exists.
     """
     try:
         profile_path = get_profile_path()
         if profile_path.exists():
-            return profile_path.read_text(encoding='utf-8')
+            with locked_file(profile_path, 'r') as f:
+                return f.read()
         return ""
-    except Exception:
-        # Silent failure
+    except Exception as e:
+        # Log the error for debugging but continue silently
+        logger = get_logger()
+        logger.debug(f"Failed to load profile: {e}")
         return ""
 
 
@@ -64,17 +111,41 @@ def get_profile_path():
     return memory_dir / "profile.md"
 
 
+@contextlib.contextmanager
+def locked_file(file_path, mode='r'):
+    """Context manager for file locking to prevent concurrent access issues."""
+    try:
+        with open(file_path, mode, encoding='utf-8') as f:
+            # Apply exclusive lock
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                yield f
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        # If locking fails, continue without lock but log the issue
+        logger = get_logger()
+        logger.debug(f"File locking failed for {file_path}, proceeding without lock")
+        with open(file_path, mode, encoding='utf-8') as f:
+            yield f
+
+
 def save_user_profile(content):
     """
-    Save content to user profile file.
+    Save content to user profile file with file locking for concurrent access safety.
     Creates directory and file if they don't exist.
     """
     try:
         profile_path = get_profile_path()
-        profile_path.write_text(content, encoding='utf-8')
+        
+        # Use file locking to prevent concurrent access
+        with locked_file(profile_path, 'w') as f:
+            f.write(content)
         return True
-    except Exception:
-        # Silent failure
+    except Exception as e:
+        # Log the error for debugging but continue silently
+        logger = get_logger()
+        logger.debug(f"Failed to save profile: {e}")
         return False
 
 
@@ -95,8 +166,10 @@ def get_llm_database_path():
             if db_path.exists():
                 return db_path
         return None
-    except Exception:
-        # Silent failure
+    except Exception as e:
+        # Log error for debugging
+        logger = get_logger()
+        logger.debug(f"Failed to get database path: {e}")
         return None
 
 
@@ -140,8 +213,10 @@ def get_latest_conversation(since_timestamp=None):
                 'id': result[3]
             }
         return None
-    except Exception:
-        # Silent failure
+    except Exception as e:
+        # Log error for debugging
+        logger = get_logger()
+        logger.debug(f"Failed to get latest conversation: {e}")
         return None
 
 
@@ -151,6 +226,10 @@ def update_profile_with_conversation(conversation_data):
     Returns True if profile was updated, False otherwise.
     """
     try:
+        # Check if updates are disabled
+        if is_updates_disabled():
+            return False
+            
         current_profile = load_user_profile()
         if not current_profile:
             # Create initial profile structure if none exists
@@ -190,11 +269,15 @@ Return the complete updated profile in the same markdown format."""
         # Check if update is needed
         if response_text != "NO_UPDATE" and response_text != current_profile.strip():
             if save_user_profile(response_text):
+                logger = get_logger()
+                logger.debug(f"Profile updated from conversation with model {model_name}")
                 return True
                 
         return False
-    except Exception:
-        # Silent failure - never break main functionality
+    except Exception as e:
+        # Log error for debugging but never break main functionality
+        logger = get_logger()
+        logger.debug(f"Profile update failed: {e}")
         return False
 
 
@@ -392,13 +475,30 @@ def verify_shell_integration():
             'function_installed': installed
         }
     except Exception as e:
+        logger = get_logger()
+        logger.debug(f"Shell integration verification failed: {e}")
         return {'success': False, 'error': str(e)}
+
+
+def is_updates_disabled():
+    """Check if profile updates are disabled via environment variable."""
+    return os.environ.get('LLM_MEMORY_UPDATES', '').lower() in ('false', '0', 'no')
+
+
+def get_update_interval():
+    """Get update check interval in seconds from environment variable."""
+    try:
+        interval = int(os.environ.get('LLM_MEMORY_UPDATE_INTERVAL', '5'))
+        return max(1, interval)  # Minimum 1 second
+    except (ValueError, TypeError):
+        return 5  # Default 5 seconds
 
 
 # Global variables for background monitoring
 _monitor_thread = None
 _monitor_running = False
 _last_check_timestamp = None
+_monitor_paused = False
 
 
 class ProfileMonitor:
@@ -408,10 +508,15 @@ class ProfileMonitor:
         self.running = False
         self.thread = None
         self.last_check_timestamp = None
+        self.paused = False
         
     def start(self):
         """Start the background monitoring thread."""
         if self.running:
+            return
+            
+        # Don't start if memory system is disabled
+        if is_memory_disabled():
             return
             
         self.running = True
@@ -420,24 +525,47 @@ class ProfileMonitor:
         
         # Register cleanup on exit
         atexit.register(self.stop)
+        
+        logger = get_logger()
+        logger.debug("Profile monitoring started")
     
     def stop(self):
         """Stop the background monitoring thread."""
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1)
+            
+        logger = get_logger()
+        logger.debug("Profile monitoring stopped")
+    
+    def pause(self):
+        """Pause profile updates without stopping the monitoring thread."""
+        self.paused = True
+        logger = get_logger()
+        logger.debug("Profile updates paused")
+    
+    def resume(self):
+        """Resume profile updates."""
+        self.paused = False
+        logger = get_logger()
+        logger.debug("Profile updates resumed")
     
     def _monitor_loop(self):
         """Main monitoring loop that runs in background thread."""
+        update_interval = get_update_interval()
+        
         while self.running:
             try:
-                self._check_for_updates()
-            except Exception:
-                # Silent failure - never break
-                pass
+                if not self.paused:
+                    self._check_for_updates()
+            except Exception as e:
+                # Log error for debugging but never break
+                logger = get_logger()
+                logger.debug(f"Monitor loop error: {e}")
             
-            # Wait 5 seconds before next check
-            for _ in range(50):  # Check every 0.1 seconds for early exit
+            # Wait for configured interval before next check
+            sleep_increments = int(update_interval * 10)  # Check every 0.1 seconds for early exit
+            for _ in range(sleep_increments):
                 if not self.running:
                     break
                 time.sleep(0.1)
@@ -445,6 +573,10 @@ class ProfileMonitor:
     def _check_for_updates(self):
         """Check for new conversations and update profile if needed."""
         try:
+            # Skip if updates are disabled
+            if is_updates_disabled():
+                return
+                
             # Get latest conversation since last check
             conversation = get_latest_conversation(self.last_check_timestamp)
             
@@ -456,12 +588,14 @@ class ProfileMonitor:
                 if conversation['prompt'] and conversation['prompt'].strip():
                     # Attempt to update profile
                     if update_profile_with_conversation(conversation):
-                        # Profile was updated - could show notification in future
-                        pass
+                        # Profile was updated
+                        logger = get_logger()
+                        logger.debug(f"Profile updated from conversation {conversation['id']}")
                         
-        except Exception:
-            # Silent failure
-            pass
+        except Exception as e:
+            # Log error for debugging but continue silently
+            logger = get_logger()
+            logger.debug(f"Update check failed: {e}")
 
 
 # Global monitor instance
@@ -471,7 +605,7 @@ _profile_monitor = ProfileMonitor()
 def ensure_monitoring_started():
     """Ensure background monitoring is started. Called when memory is first used."""
     global _profile_monitor
-    if not _profile_monitor.running:
+    if not _profile_monitor.running and not is_memory_disabled():
         _profile_monitor.start()
 
 
@@ -545,15 +679,41 @@ def register_commands(cli):
             global _profile_monitor
             monitor_status = "Running" if _profile_monitor.running else "Stopped"
             click.echo(f"  Background monitoring: {monitor_status}")
+            if _profile_monitor.running:
+                if _profile_monitor.paused:
+                    click.echo(f"  Update status: Paused (use 'llm memory resume' to enable)")
+                else:
+                    click.echo(f"  Update status: Active")
+                    update_interval = get_update_interval()
+                    click.echo(f"  Update interval: {update_interval} seconds")
+            
+            # Check configuration
+            if is_memory_disabled():
+                click.echo(f"  Memory system: Disabled (LLM_MEMORY_DISABLED=true)")
+            elif is_updates_disabled():
+                click.echo(f"  Profile updates: Disabled (LLM_MEMORY_UPDATES=false)")
+            
+            # Show environment configuration
+            debug_enabled = os.environ.get('LLM_MEMORY_DEBUG', '').lower() in ('1', 'true', 'yes')
+            if debug_enabled:
+                memory_dir = llm.user_dir() / "memory"
+                log_file = memory_dir / "debug.log"
+                click.echo(f"  Debug logging: Enabled ({log_file})")
             
             if profile_exists:
                 profile_size = profile_path.stat().st_size
                 click.echo(f"  Profile size: {profile_size} bytes")
-                click.echo(f"  Memory system: Active")
-                click.echo(f"  Usage: llm -f memory:auto \"your prompt\"")
+                if not is_memory_disabled():
+                    click.echo(f"  Memory system: Active")
+                    click.echo(f"  Usage: llm -f memory:auto \"your prompt\"")
+                else:
+                    click.echo(f"  Memory system: Disabled by environment variable")
             else:
                 click.echo(f"  Memory system: Inactive (no profile)")
-                click.echo(f"  The profile will be created automatically when you start using memory fragments.")
+                if not is_memory_disabled():
+                    click.echo(f"  The profile will be created automatically when you start using memory fragments.")
+                else:
+                    click.echo(f"  Memory system is disabled by environment variable.")
                 
         except Exception as e:
             click.echo(f"Error checking status: {e}", err=True)
@@ -682,3 +842,26 @@ def register_commands(cli):
                 
         except Exception as e:
             click.echo(f"Error checking shell status: {e}", err=True)
+    
+    @memory.command("pause")
+    def pause():
+        """Temporarily disable memory profile updates"""
+        try:
+            global _profile_monitor
+            _profile_monitor.pause()
+            click.echo("Memory updates paused.")
+            click.echo("Profile content will still be injected, but no automatic updates will occur.")
+            click.echo("Use 'llm memory resume' to re-enable updates.")
+        except Exception as e:
+            click.echo(f"Error pausing updates: {e}", err=True)
+    
+    @memory.command("resume")
+    def resume():
+        """Re-enable memory profile updates"""
+        try:
+            global _profile_monitor
+            _profile_monitor.resume()
+            click.echo("Memory updates resumed.")
+            click.echo("Profile will now be automatically updated based on your conversations.")
+        except Exception as e:
+            click.echo(f"Error resuming updates: {e}", err=True)
