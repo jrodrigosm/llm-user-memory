@@ -1,4 +1,5 @@
 import llm
+import click
 from pathlib import Path
 
 
@@ -65,3 +66,85 @@ def save_user_profile(content):
     except Exception:
         # Silent failure
         return False
+
+
+@llm.hookimpl
+def register_commands(cli):
+    @cli.group()
+    def memory():
+        """Memory management commands"""
+        pass
+    
+    @memory.command()
+    def show():
+        """Display current user profile"""
+        try:
+            profile_content = load_user_profile()
+            if profile_content.strip():
+                click.echo(profile_content)
+            else:
+                click.echo("No memory profile found. Profile will be created automatically when you start using LLM with memory.")
+        except Exception as e:
+            click.echo(f"Error reading profile: {e}", err=True)
+    
+    @memory.command()
+    def clear():
+        """Clear user profile and create empty one"""
+        try:
+            profile_path = get_profile_path()
+            
+            # Create empty profile with basic structure
+            empty_profile = """# User Profile
+
+## Personal Information
+- Role: [Not specified]
+
+## Interests
+- [No interests recorded yet]
+
+## Current Projects
+- [No current projects recorded]
+
+## Preferences
+- [No preferences recorded yet]
+"""
+            
+            if save_user_profile(empty_profile):
+                click.echo(f"Memory profile cleared and reset to empty state.")
+                click.echo(f"Location: {profile_path}")
+            else:
+                click.echo("Error: Failed to clear profile", err=True)
+        except Exception as e:
+            click.echo(f"Error clearing profile: {e}", err=True)
+    
+    @memory.command()
+    def status():
+        """Show if memory system is active"""
+        try:
+            profile_path = get_profile_path()
+            profile_exists = profile_path.exists()
+            
+            click.echo("Memory System Status:")
+            click.echo(f"  Profile location: {profile_path}")
+            click.echo(f"  Profile exists: {'Yes' if profile_exists else 'No'}")
+            
+            if profile_exists:
+                profile_size = profile_path.stat().st_size
+                click.echo(f"  Profile size: {profile_size} bytes")
+                click.echo(f"  Memory system: Active")
+                click.echo(f"  Usage: llm -f memory:auto \"your prompt\"")
+            else:
+                click.echo(f"  Memory system: Inactive (no profile)")
+                click.echo(f"  The profile will be created automatically when you start using memory fragments.")
+                
+        except Exception as e:
+            click.echo(f"Error checking status: {e}", err=True)
+    
+    @memory.command()
+    def path():
+        """Show profile file location"""
+        try:
+            profile_path = get_profile_path()
+            click.echo(str(profile_path))
+        except Exception as e:
+            click.echo(f"Error getting path: {e}", err=True)

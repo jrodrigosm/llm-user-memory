@@ -267,9 +267,9 @@ llm() {
 - [x] Profile file is read correctly from user directory
 
 ### Phase 3 Success
-- [ ] All CLI commands work: `llm memory show/clear/status/path`
-- [ ] Commands handle missing profiles gracefully
-- [ ] File operations work correctly
+- [x] All CLI commands work: `llm memory show/clear/status/path`
+- [x] Commands handle missing profiles gracefully
+- [x] File operations work correctly
 
 ### Phase 4 Success
 - [ ] Database monitoring detects new conversations
