@@ -1,6 +1,12 @@
 import llm
 import click
 from pathlib import Path
+import sqlite3
+import subprocess
+import threading
+import time
+import os
+import atexit
 
 
 @llm.hookimpl
@@ -16,6 +22,9 @@ def memory_fragment_loader(argument):
     """
     try:
         if argument == "auto":
+            # Start background monitoring when memory is first used
+            ensure_monitoring_started()
+            
             profile_content = load_user_profile()
             if profile_content:
                 # Return Fragment object with source attribution
@@ -66,6 +75,206 @@ def save_user_profile(content):
     except Exception:
         # Silent failure
         return False
+
+
+def get_llm_database_path():
+    """
+    Get the path to LLM's conversation database using `llm logs path`.
+    Returns Path object or None if unable to get path.
+    """
+    try:
+        result = subprocess.run(
+            ["llm", "logs", "path"], 
+            capture_output=True, 
+            text=True, 
+            timeout=10
+        )
+        if result.returncode == 0:
+            db_path = Path(result.stdout.strip())
+            if db_path.exists():
+                return db_path
+        return None
+    except Exception:
+        # Silent failure
+        return None
+
+
+def get_latest_conversation(since_timestamp=None):
+    """
+    Get the most recent conversation from LLM database.
+    Returns dict with conversation info or None if no conversation found.
+    """
+    try:
+        db_path = get_llm_database_path()
+        if not db_path:
+            return None
+            
+        conn = sqlite3.connect(str(db_path))
+        
+        # Query for latest response
+        if since_timestamp:
+            cursor = conn.execute("""
+                SELECT prompt, model, datetime_utc, id
+                FROM responses 
+                WHERE datetime_utc > ?
+                ORDER BY datetime_utc DESC 
+                LIMIT 1
+            """, (since_timestamp,))
+        else:
+            cursor = conn.execute("""
+                SELECT prompt, model, datetime_utc, id
+                FROM responses 
+                ORDER BY datetime_utc DESC 
+                LIMIT 1
+            """)
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                'prompt': result[0],
+                'model': result[1], 
+                'datetime_utc': result[2],
+                'id': result[3]
+            }
+        return None
+    except Exception:
+        # Silent failure
+        return None
+
+
+def update_profile_with_conversation(conversation_data):
+    """
+    Send profile update request to LLM model using conversation data.
+    Returns True if profile was updated, False otherwise.
+    """
+    try:
+        current_profile = load_user_profile()
+        if not current_profile:
+            # Create initial profile structure if none exists
+            current_profile = """# User Profile
+
+## Personal Information
+- Role: [Not specified]
+
+## Interests
+- [No interests recorded yet]
+
+## Current Projects
+- [No current projects recorded]
+
+## Preferences
+- [No preferences recorded yet]
+"""
+
+        # Create update prompt
+        update_prompt = f"""Current user profile:
+{current_profile}
+
+User's latest interaction:
+{conversation_data['prompt']}
+
+Please update the user profile based on this new information. Only include relevant, factual information about the user. If no update is needed, respond exactly with "NO_UPDATE".
+
+Return the complete updated profile in the same markdown format."""
+
+        # Use the same model that was used in the conversation
+        model_name = conversation_data['model']
+        model = llm.get_model(model_name)
+        
+        response = model.prompt(update_prompt)
+        response_text = response.text().strip()
+        
+        # Check if update is needed
+        if response_text != "NO_UPDATE" and response_text != current_profile.strip():
+            if save_user_profile(response_text):
+                return True
+                
+        return False
+    except Exception:
+        # Silent failure - never break main functionality
+        return False
+
+
+# Global variables for background monitoring
+_monitor_thread = None
+_monitor_running = False
+_last_check_timestamp = None
+
+
+class ProfileMonitor:
+    """Background monitoring service for profile updates."""
+    
+    def __init__(self):
+        self.running = False
+        self.thread = None
+        self.last_check_timestamp = None
+        
+    def start(self):
+        """Start the background monitoring thread."""
+        if self.running:
+            return
+            
+        self.running = True
+        self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.thread.start()
+        
+        # Register cleanup on exit
+        atexit.register(self.stop)
+    
+    def stop(self):
+        """Stop the background monitoring thread."""
+        self.running = False
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1)
+    
+    def _monitor_loop(self):
+        """Main monitoring loop that runs in background thread."""
+        while self.running:
+            try:
+                self._check_for_updates()
+            except Exception:
+                # Silent failure - never break
+                pass
+            
+            # Wait 5 seconds before next check
+            for _ in range(50):  # Check every 0.1 seconds for early exit
+                if not self.running:
+                    break
+                time.sleep(0.1)
+    
+    def _check_for_updates(self):
+        """Check for new conversations and update profile if needed."""
+        try:
+            # Get latest conversation since last check
+            conversation = get_latest_conversation(self.last_check_timestamp)
+            
+            if conversation:
+                # Update timestamp to prevent reprocessing
+                self.last_check_timestamp = conversation['datetime_utc']
+                
+                # Only update if this is a user prompt (not empty)
+                if conversation['prompt'] and conversation['prompt'].strip():
+                    # Attempt to update profile
+                    if update_profile_with_conversation(conversation):
+                        # Profile was updated - could show notification in future
+                        pass
+                        
+        except Exception:
+            # Silent failure
+            pass
+
+
+# Global monitor instance
+_profile_monitor = ProfileMonitor()
+
+
+def ensure_monitoring_started():
+    """Ensure background monitoring is started. Called when memory is first used."""
+    global _profile_monitor
+    if not _profile_monitor.running:
+        _profile_monitor.start()
 
 
 @llm.hookimpl
@@ -127,6 +336,17 @@ def register_commands(cli):
             click.echo("Memory System Status:")
             click.echo(f"  Profile location: {profile_path}")
             click.echo(f"  Profile exists: {'Yes' if profile_exists else 'No'}")
+            
+            # Check database access
+            db_path = get_llm_database_path()
+            click.echo(f"  Database access: {'Yes' if db_path else 'No'}")
+            if db_path:
+                click.echo(f"  Database location: {db_path}")
+            
+            # Check monitoring status
+            global _profile_monitor
+            monitor_status = "Running" if _profile_monitor.running else "Stopped"
+            click.echo(f"  Background monitoring: {monitor_status}")
             
             if profile_exists:
                 profile_size = profile_path.stat().st_size
