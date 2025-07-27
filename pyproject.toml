@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-user-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Transparent memory system for LLM"
 readme = "README.md"
 authors = [{name = "Rodrigo Serrano", email = "jrodrigosm@gmail.com"}]
