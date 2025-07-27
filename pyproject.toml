@@ -7,8 +7,28 @@ name = "llm-memory"
 version = "0.1.0"
 description = "Transparent memory system for LLM"
 readme = "README.md"
+authors = [{name = "Rodrigo Serrano"}]
 requires-python = ">=3.8"
-dependencies = ["llm>=0.13"]
+dependencies = ["llm>=0.26"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-xdist>=3.0.0",  # for parallel test execution
+    "pytest-click>=1.1.0",  # for testing Click commands
+    "coverage>=7.0.0",
+    "responses>=0.23.0",    # for HTTP mocking if needed
+]
+
+dev = [
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
 
 [project.entry-points.llm]
 llm-memory = "llm_memory"

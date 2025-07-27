@@ -8,3 +8,7 @@ venv
 *.egg-info
 dist
 build
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
