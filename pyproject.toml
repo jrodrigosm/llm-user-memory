@@ -3,13 +3,32 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-memory"
+name = "llm-user-memory"
 version = "0.1.0"
 description = "Transparent memory system for LLM"
 readme = "README.md"
-authors = [{name = "Rodrigo Serrano"}]
+authors = [{name = "Rodrigo Serrano", email = "jrodrigosm@gmail.com"}]
+license = "Apache-2.0"
+keywords = ["llm", "memory", "ai", "chatbot", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.8"
 dependencies = ["llm>=0.26"]
+
+[project.urls]
+Homepage = "https://github.com/jrodrigosm/llm-memory"
+Repository = "https://github.com/jrodrigosm/llm-memory"
+Issues = "https://github.com/jrodrigosm/llm-memory/issues"
 
 [project.optional-dependencies]
 test = [

@@ -1,9 +1,9 @@
 # llm-memory
 
-[![PyPI](https://img.shields.io/pypi/v/llm-memory.svg)](https://pypi.org/project/llm-memory/)
-[![Changelog](https://img.shields.io/github/v/release/user/llm-memory?include_prereleases&label=changelog)](https://github.com/user/llm-memory/releases)
-[![Tests](https://github.com/user/llm-memory/workflows/Test/badge.svg)](https://github.com/user/llm-memory/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/user/llm-memory/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/llm-user-memory.svg)](https://pypi.org/project/llm-user-memory/)
+[![Changelog](https://img.shields.io/github/v/release/jrodrigosm/llm-memory?include_prereleases&label=changelog)](https://github.com/jrodrigosm/llm-memory/releases)
+[![Tests](https://github.com/jrodrigosm/llm-memory/workflows/Test/badge.svg)](https://github.com/jrodrigosm/llm-memory/actions?query=workflow%3ATest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/jrodrigosm/llm-memory/blob/main/LICENSE)
 
 A transparent memory system for [LLM](https://llm.datasette.io/) that automatically maintains and uses a user profile to provide personalized AI responses.
 
@@ -11,7 +11,7 @@ A transparent memory system for [LLM](https://llm.datasette.io/) that automatica
 
 Install this plugin in the same environment as LLM:
 ```bash
-llm install llm-memory
+llm install llm-user-memory
 ```
 
 ## Usage

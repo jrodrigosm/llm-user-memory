@@ -85,7 +85,7 @@ def memory_fragment_loader(argument):
 
 def load_user_profile():
     """
-    Load user profile from ~/.config/llm/memory/profile.md with file locking.
+    Load user profile from ~/.config/io.datasette.llm/memory/profile.md with file locking.
     Returns profile content or empty string if no profile exists.
     """
     try:
