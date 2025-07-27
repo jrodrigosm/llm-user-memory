@@ -26,9 +26,9 @@ requires-python = ">=3.8"
 dependencies = ["llm>=0.26"]
 
 [project.urls]
-Homepage = "https://github.com/jrodrigosm/llm-memory"
-Repository = "https://github.com/jrodrigosm/llm-memory"
-Issues = "https://github.com/jrodrigosm/llm-memory/issues"
+Homepage = "https://github.com/jrodrigosm/llm-user-memory"
+Repository = "https://github.com/jrodrigosm/llm-user-memory"
+Issues = "https://github.com/jrodrigosm/llm-user-memory/issues"
 
 [project.optional-dependencies]
 test = [

@@ -1,9 +1,9 @@
-# llm-memory
+# llm-user-memory
 
 [![PyPI](https://img.shields.io/pypi/v/llm-user-memory.svg)](https://pypi.org/project/llm-user-memory/)
-[![Changelog](https://img.shields.io/github/v/release/jrodrigosm/llm-memory?include_prereleases&label=changelog)](https://github.com/jrodrigosm/llm-memory/releases)
-[![Tests](https://github.com/jrodrigosm/llm-memory/workflows/Test/badge.svg)](https://github.com/jrodrigosm/llm-memory/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/jrodrigosm/llm-memory/blob/main/LICENSE)
+[![Changelog](https://img.shields.io/github/v/release/jrodrigosm/llm-user-memory?include_prereleases&label=changelog)](https://github.com/jrodrigosm/llm-user-memory/releases)
+[![Tests](https://github.com/jrodrigosm/llm-user-memory/workflows/Test/badge.svg)](https://github.com/jrodrigosm/llm-user-memory/actions?query=workflow%3ATest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/jrodrigosm/llm-user-memory/blob/main/LICENSE)
 
 A transparent memory system for [LLM](https://llm.datasette.io/) that automatically maintains and uses a user profile to provide personalized AI responses.
 
@@ -175,7 +175,7 @@ llm -f memory:auto "your prompt here"
 
 To set up this plugin locally, first checkout the code. Then create a new virtual environment:
 ```bash
-cd llm-memory
+cd llm-user-memory
 python -m venv venv
 source venv/bin/activate
 ```
